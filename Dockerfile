@@ -1,56 +1,41 @@
-# Builder stage
-FROM node:22 AS installer
-WORKDIR /juice-shop
+/*
+ * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.
+ * SPDX-License-Identifier: MIT
+ */
+import type { BasketItemModel } from 'models/basketitem'
+import type { ChallengeKey, ChallengeModel } from 'models/challenge'
+import type { ComplaintModel } from 'models/complaint'
+import type { FeedbackModel } from 'models/feedback'
+import type { ProductModel } from 'models/product'
+import type { BasketModel } from 'models/basket'
+import type { UserModel } from 'models/user'
 
-# Copy manifests first for better caching
-COPY package.json package-lock.json ./
+/* jslint node: true */
+export const challenges: Record<ChallengeKey, ChallengeModel> = {} as Record<ChallengeKey, ChallengeModel>
+export const users: Record<string, UserModel> = {}
+export const products: Record<string, ProductModel> = {}
+export const feedback: Record<string, FeedbackModel> = {}
+export const baskets: Record<string, BasketModel> = {}
+export const basketItems: Record<string, BasketItemModel> = {}
+export const complaints: Record<string, ComplaintModel> = {}
 
-# Install dependencies securely
-RUN npm ci --omit=dev && \
-    npm dedupe --omit=dev && \
-    npm cache clean --force
+export interface Notification {
+  key: string
+  name: string
+  challenge: string
+  flag: string
+  hidden: boolean
+  isRestore: boolean
+}
+export const notifications: Notification[] = []
 
-# Copy source code
-COPY . .
+// ✅ Secure encapsulation: private variable, controlled access
+let _retrieveBlueprintChallengeFile: string | null = null
 
-# Pin global tools to known versions
-RUN npm install -g typescript@5.6.3 ts-node@10.9.2
+export function getRetrieveBlueprintChallengeFile (): string | null {
+  return _retrieveBlueprintChallengeFile
+}
 
-# Clean up unnecessary frontend artifacts in one layer
-RUN rm -rf frontend/node_modules frontend/.angular frontend/src/assets && \
-    mkdir -p logs && \
-    chown -R 65532 logs && \
-    chgrp -R 0 ftp/ frontend/dist/ logs/ data/ i18n/ || true && \
-    chmod -R g=u ftp/ frontend/dist/ logs/ data/ i18n/ || true && \
-    rm -f data/chatbot/botDefaultTrainingData.json \
-          ftp/legal.md \
-          i18n/*.json
-
-# SBOM generation (merged into one RUN)
-ARG CYCLONEDX_NPM_VERSION="0.5.2"
-RUN npm install -g "@cyclonedx/cyclonedx-npm@${CYCLONEDX_NPM_VERSION}" && \
-    npm run sbom
-
-# Runtime stage
-FROM gcr.io/distroless/nodejs22-debian12
-ARG BUILD_DATE
-ARG VCS_REF
-LABEL maintainer="Bjoern Kimminich <bjoern.kimminich@owasp.org>" \
-    org.opencontainers.image.title="OWASP Juice Shop" \
-    org.opencontainers.image.description="Probably the most modern and sophisticated insecure web application" \
-    org.opencontainers.image.authors="Bjoern Kimminich <bjoern.kimminich@owasp.org>" \
-    org.opencontainers.image.vendor="Open Worldwide Application Security Project" \
-    org.opencontainers.image.documentation="https://help.owasp-juice.shop" \
-    org.opencontainers.image.licenses="MIT" \
-    org.opencontainers.image.version="19.1.1" \
-    org.opencontainers.image.url="https://owasp-juice.shop" \
-    org.opencontainers.image.source="https://github.com/juice-shop/juice-shop" \
-    org.opencontainers.image.revision=$VCS_REF \
-    org.opencontainers.image.created=$BUILD_DATE
-
-WORKDIR /juice-shop
-COPY --from=installer --chown=65532:0 /juice-shop .
-
-USER 65532
-EXPOSE 3000
-CMD ["/juice-shop/build/app.js"]
+export function setRetrieveBlueprintChallengeFile (retrieveBlueprintChallengeFileArg: string): void {
+  _retrieveBlueprintChallengeFile = retrieveBlueprintChallengeFileArg
+}
