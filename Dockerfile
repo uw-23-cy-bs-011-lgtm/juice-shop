@@ -1,25 +1,38 @@
+# Builder stage
 FROM node:22 AS installer
-COPY . /juice-shop
 WORKDIR /juice-shop
-RUN npm i -g typescript ts-node
-RUN npm install --omit=dev --unsafe-perm
-RUN npm dedupe --omit=dev
-RUN rm -rf frontend/node_modules
-RUN rm -rf frontend/.angular
-RUN rm -rf frontend/src/assets
-RUN mkdir logs
-RUN chown -R 65532 logs
-RUN chgrp -R 0 ftp/ frontend/dist/ logs/ data/ i18n/
-RUN chmod -R g=u ftp/ frontend/dist/ logs/ data/ i18n/
-RUN rm data/chatbot/botDefaultTrainingData.json || true
-RUN rm ftp/legal.md || true
-RUN rm i18n/*.json || true
 
-ARG CYCLONEDX_NPM_VERSION=latest
+# Copy manifests first for better caching
+COPY package.json package-lock.json ./
+
+# Install dependencies securely
+RUN npm ci --omit=dev && \
+    npm dedupe --omit=dev && \
+    npm cache clean --force
+
+# Copy source code
+COPY . .
+
+# Pin global tools to known versions
+RUN npm install -g typescript@5.6.3 ts-node@10.9.2
+
+# Clean up unnecessary frontend artifacts in one layer
+RUN rm -rf frontend/node_modules frontend/.angular frontend/src/assets && \
+    mkdir -p logs && \
+    chown -R 65532 logs && \
+    chgrp -R 0 ftp/ frontend/dist/ logs/ data/ i18n/ || true && \
+    chmod -R g=u ftp/ frontend/dist/ logs/ data/ i18n/ || true && \
+    rm -f data/chatbot/botDefaultTrainingData.json \
+          ftp/legal.md \
+          i18n/*.json
+
+# SBOM generation (merged into one RUN)
 ARG CYCLONEDX_NPM_VERSION="0.5.2"
-RUN npm run sbom
+RUN npm install -g "@cyclonedx/cyclonedx-npm@${CYCLONEDX_NPM_VERSION}" && \
+    npm run sbom
 
-RUN npm install -g "@cyclonedx/cyclonedx-npm@${CYCLONEDX_NPM_VERSION}"
+# Runtime stage
+FROM gcr.io/distroless/nodejs22-debian12
 ARG BUILD_DATE
 ARG VCS_REF
 LABEL maintainer="Bjoern Kimminich <bjoern.kimminich@owasp.org>" \
@@ -34,8 +47,10 @@ LABEL maintainer="Bjoern Kimminich <bjoern.kimminich@owasp.org>" \
     org.opencontainers.image.source="https://github.com/juice-shop/juice-shop" \
     org.opencontainers.image.revision=$VCS_REF \
     org.opencontainers.image.created=$BUILD_DATE
+
 WORKDIR /juice-shop
 COPY --from=installer --chown=65532:0 /juice-shop .
+
 USER 65532
 EXPOSE 3000
 CMD ["/juice-shop/build/app.js"]
