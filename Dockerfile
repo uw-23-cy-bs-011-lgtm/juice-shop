@@ -1,36 +1,106 @@
-FROM node:22 AS builder
-WORKDIR /juice-shop
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm dedupe --omit=dev && npm cache clean --force
-COPY . .
-RUN npm install -g typescript@5.6.3 ts-node@10.9.2
-ARG CYCLONEDX_NPM_VERSION="0.5.2"
-RUN npm install -g "@cyclonedx/cyclonedx-npm@${CYCLONEDX_NPM_VERSION}" && npm run sbom
-FROM gcr.io/distroless/nodejs22-debian12
-WORKDIR /juice-shop
-COPY --from=builder --chown=65532:0 /juice-shop .
-USER 65532
-EXPOSE 3000
-CMD ["/juice-shop/build/app.js"]
-let _retrieveBlueprintChallengeFile: string | null = null
+<!--
+  ~ Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.
+  ~ SPDX-License-Identifier: MIT
+-->
+<div class="center-container">
+  <mat-card appearance="outlined" class="mat-elevation-z6">
+    <div class="mdc-card">
+      <h1 translate>TITLE_FORGOT_PASSWORD</h1>
 
-export function getRetrieveBlueprintChallengeFile (): string | null {
-  return _retrieveBlueprintChallengeFile
-}
-export function setRetrieveBlueprintChallengeFile (arg: string): void {
-  _retrieveBlueprintChallengeFile = arg
-}
-<button
-  type="submit"
-  id="changeButton"
-  mat-raised-button
-  [disabled]="passwordControl.invalid || newPasswordControl.invalid || repeatNewPasswordControl.invalid"
-  color="primary"
-  (click)="changePassword()"
->
-  <i class="far fa-edit fa-lg" aria-hidden="true"></i>
-  {{ 'BTN_CHANGE' | translate }}
-</button>
+      <div class="confirmation"
+        [hidden]="!(confirmation && !emailControl.dirty && !securityQuestionControl.dirty && !passwordControl.dirty && !repeatPasswordControl.dirty)"
+        role="status" aria-live="polite">
+        {{ confirmation }}
+      </div>
 
+      <div class="error"
+        [hidden]="!(error && !emailControl.dirty && !securityQuestionControl.dirty && !passwordControl.dirty && !repeatPasswordControl.dirty)"
+        role="alert" aria-live="assertive">
+        {{ error }}
+      </div>
 
+      <div class="form-container">
+        <mat-form-field appearance="outline" color="accent">
+          <mat-label translate>LABEL_EMAIL</mat-label>
+          <input id="email" [formControl]="emailControl" (ngModelChange)="findSecurityQuestion()"
+            type="email" matInput placeholder="{{ 'MANDATORY_EMAIL' | translate }}" autocomplete="email">
+          <mat-icon matSuffix matTooltip="{{ 'MANDATORY_EMAIL' | translate }}" matTooltipPosition="right"
+            aria-hidden="true">help_outline</mat-icon>
+          @if (emailControl.invalid && emailControl.errors.required) {
+            <mat-error translate>MANDATORY_EMAIL</mat-error>
+          }
+          @if (emailControl.invalid && emailControl.errors.email) {
+            <mat-error translate>INVALID_EMAIL</mat-error>
+          }
+        </mat-form-field>
+      </div>
 
+      <div class="form-container" id="forgot-form">
+        <mat-form-field appearance="outline" color="accent">
+          <mat-label translate>LABEL_SECURITY_QUESTION</mat-label>
+          <input id="securityAnswer" [formControl]="securityQuestionControl" type="password" matInput
+            placeholder="{{ securityQuestion }}" autocomplete="off">
+          <mat-icon matSuffix matTooltip="{{ 'MANDATORY_SECURITY_ANSWER' | translate }}" matTooltipPosition="right"
+            aria-hidden="true">help_outline</mat-icon>
+          @if (securityQuestionControl.invalid && securityQuestionControl.errors.required) {
+            <mat-error translate>MANDATORY_SECURITY_ANSWER</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" color="accent">
+          <mat-label translate>LABEL_NEW_PASSWORD</mat-label>
+          <input #password id="newPassword" [formControl]="passwordControl" type="password" matInput
+            autocomplete="new-password">
+          <mat-hint translate>
+            <i class="fas fa-exclamation-circle" aria-hidden="true"></i>
+            <em style="margin-left:5px;" translate>{{ 'INVALID_PASSWORD_LENGTH' | translate:{length: '5-40'} }}</em>
+          </mat-hint>
+          <mat-hint align="end">{{password.value?.length || 0}}/40</mat-hint>
+          @if (passwordControl.invalid && passwordControl.errors.required) {
+            <mat-error translate>MANDATORY_NEW_PASSWORD</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" color="accent">
+          <mat-label translate>LABEL_REPEAT_NEW_PASSWORD</mat-label>
+          <input #repeatPassword id="newPasswordRepeat" [formControl]="repeatPasswordControl" type="password" matInput
+            autocomplete="new-password">
+          <mat-hint align="end">{{repeatPassword.value?.length || 0}}/40</mat-hint>
+          @if (repeatPasswordControl.invalid && repeatPasswordControl.errors.required) {
+            <mat-error translate>MANDATORY_PASSWORD_REPEAT</mat-error>
+          }
+          @if (repeatPasswordControl.invalid && repeatPasswordControl.errors.notSame) {
+            <mat-error translate>PASSWORDS_NOT_MATCHING</mat-error>
+          }
+          @if (repeatPasswordControl.invalid && (repeatPasswordControl.errors.minlength || repeatPasswordControl.errors.maxlength)) {
+            <mat-error translate [translateParams]="{length: '5-40'}">INVALID_PASSWORD_LENGTH</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-slide-toggle #passwordInfoToggle [color]="passwordStrength.color">
+          {{'SHOW_PASSWORD_ADVICE' | translate}}
+        </mat-slide-toggle>
+        <app-password-strength #passwordStrength [password]="password.value"></app-password-strength>
+        <div class="advice-container">
+          @if (passwordInfoToggle.checked) {
+            <app-password-strength-info [passwordComponent]="passwordStrength"
+              [lowerCaseCriteriaMsg]="'LOWER_CASE_CRITERIA_MSG' | translate"
+              [upperCaseCriteriaMsg]="'UPPER_CASE_CRITERIA_MSG' | translate"
+              [digitsCriteriaMsg]="'DIGITS_CRITERIA_MSG' | translate"
+              [specialCharsCriteriaMsg]="'SPECIAL_CHARS_CRITERIA_MSG' | translate"
+              [minCharsCriteriaMsg]="'MIN_CHARS_CRITERIA_MSG' | translate:{value: 8}">
+            </app-password-strength-info>
+          }
+        </div>
+
+        <!-- ✅ Secure button: visible label is accessible name -->
+        <button type="submit" id="resetButton"
+          [disabled]="emailControl.invalid || securityQuestionControl.invalid || passwordControl.invalid || repeatPasswordControl.invalid || repeatPasswordControl.disabled"
+          (click)="resetPassword()" mat-raised-button color="primary">
+          <i class="far fa-edit fa-lg" aria-hidden="true"></i>
+          {{'BTN_CHANGE' | translate}}
+        </button>
+      </div>
+    </div>
+  </mat-card>
+</div>
