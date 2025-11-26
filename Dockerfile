@@ -16,10 +16,10 @@ RUN rm ftp/legal.md || true
 RUN rm i18n/*.json || true
 
 ARG CYCLONEDX_NPM_VERSION=latest
-RUN npm install -g @cyclonedx/cyclonedx-npm@$CYCLONEDX_NPM_VERSION
+ARG CYCLONEDX_NPM_VERSION="0.5.2"
 RUN npm run sbom
 
-FROM gcr.io/distroless/nodejs22-debian12
+RUN npm install -g "@cyclonedx/cyclonedx-npm@${CYCLONEDX_NPM_VERSION}"
 ARG BUILD_DATE
 ARG VCS_REF
 LABEL maintainer="Bjoern Kimminich <bjoern.kimminich@owasp.org>" \
